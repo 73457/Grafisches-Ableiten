@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Grafisches Ableiten – Graphen zuordnen</title>
+
+  <!-- KaTeX ist die einzige externe Abhängigkeit und rendert Formeln im Chat. -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+
+  <style>
+    :root {
+      --ink: #183153;
+      --yellow: #ffe066;
+      --green: #6bcb77;
+      --red: #ff6b6b;
+      --grey: #d5d9df;
+      --paper-grid: #d9d9d9;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: #17212f;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background-color: #fff;
+      background-image:
+        linear-gradient(to right, var(--paper-grid) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--paper-grid) 1px, transparent 1px);
+      background-size: 5mm 5mm;
+    }
+
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 1rem;
+      width: min(1100px, calc(100% - 1.5rem));
+      margin: 0 auto;
+      padding: 1rem 0 .5rem;
+    }
+
+    .help-button {
+      justify-self: start;
+      width: 44px;
+      height: 44px;
+      border: 2px solid var(--ink);
+      border-radius: 50%;
+      background: #fff;
+      color: var(--ink);
+      font-size: 1.35rem;
+      font-weight: 800;
+    }
+
+    h1 {
+      margin: 0;
+      color: var(--ink);
+      text-align: center;
+      font-size: clamp(1.2rem, 3vw, 1.8rem);
+    }
+
+    .new-game {
+      justify-self: end;
+      padding: .65rem 1rem;
+      border: 0;
+      border-radius: .65rem;
+      background: var(--ink);
+      color: white;
+      font-weight: 700;
+    }
+
+    .scoreboard {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: .7rem 1.8rem;
+      margin: .6rem auto 1rem;
+      font-size: 1.05rem;
+      font-weight: 750;
+    }
+
+    .score {
+      padding: .45rem .8rem;
+      border: 1px solid #aab3c0;
+      border-radius: .6rem;
+      background: rgba(255,255,255,.92);
+    }
+
+    .instructions {
+      width: min(700px, calc(100% - 1.5rem));
+      margin: 0 auto 1rem;
+      text-align: center;
+      color: #334155;
+      font-size: .95rem;
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: clamp(5px, 1vw, 11px);
+      width: min(930px, calc(100% - 1.5rem));
+      margin: 0 auto 2rem;
+    }
+
+    .tile {
+      position: relative;
+      aspect-ratio: 1;
+      min-width: 0;
+      overflow: hidden;
+      padding: 0;
+      border: 2px solid #b89a21;
+      border-radius: 8px;
+      background-color: var(--yellow);
+      background-image:
+        linear-gradient(to right, var(--paper-grid) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--paper-grid) 1px, transparent 1px);
+      background-size: 5mm 5mm;
+      color: var(--ink);
+      transition: background-color .15s, border-color .15s, transform .12s;
+    }
+
+    .tile:hover:not(:disabled) { transform: translateY(-2px); }
+    .tile:focus-visible, button:focus-visible, input:focus-visible {
+      outline: 4px solid #1668d4;
+      outline-offset: 2px;
+      z-index: 2;
+    }
+
+    .tile.selected {
+      border: 4px solid var(--ink);
+      box-shadow: 0 0 0 2px white;
+    }
+    .tile.matched { background-color: var(--green); border-color: #26843b; }
+    .tile.wrong { background-color: var(--red); border-color: #ad3434; }
+    .tile.distractor {
+      background-color: var(--grey);
+      border-color: #78818e;
+      cursor: default;
+    }
+    .tile:disabled { opacity: 1; }
+
+    .tile canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .tile-symbol {
+      position: absolute;
+      top: 4px;
+      right: 6px;
+      font-size: clamp(1rem, 3vw, 1.6rem);
+      line-height: 1;
+      font-weight: 900;
+      text-shadow: 0 1px 2px #fff;
+      pointer-events: none;
+    }
+
+    .tile-hint {
+      position: absolute;
+      inset: auto 3px 3px;
+      padding: 3px;
+      border-radius: 4px;
+      background: rgba(255,255,255,.9);
+      color: #17212f;
+      font-size: clamp(.55rem, 1.5vw, .72rem);
+      font-weight: 700;
+      line-height: 1.15;
+      pointer-events: none;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0,0,0,0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    /* Chat panel */
+    .chat-panel {
+      position: fixed;
+      z-index: 20;
+      inset: 0 auto 0 0;
+      display: flex;
+      flex-direction: column;
+      width: min(360px, 100vw);
+      padding: 1rem;
+      background: #fff;
+      box-shadow: 8px 0 30px rgba(15, 23, 42, .25);
+      transform: translateX(-110%);
+      transition: transform .22s ease;
+    }
+    .chat-panel.open { transform: translateX(0); }
+
+    .chat-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: .75rem;
+      border-bottom: 1px solid #d5dbe4;
+      padding-bottom: .7rem;
+    }
+    .chat-header h2 { margin: 0; font-size: 1.15rem; color: var(--ink); }
+    .close-chat {
+      border: 0;
+      background: transparent;
+      color: var(--ink);
+      font-size: 1.8rem;
+      line-height: 1;
+    }
+
+    .chat-messages {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      gap: .7rem;
+      overflow-y: auto;
+      padding: .8rem 0;
+    }
+
+    .message {
+      max-width: 94%;
+      padding: .65rem .8rem;
+      border-radius: .8rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+    .message.tutor { align-self: flex-start; background: #eef3fa; }
+    .message.user { align-self: flex-end; background: #dcecff; }
+    .message p { margin: .15rem 0; }
+    .message .katex-display { overflow-x: auto; overflow-y: hidden; }
+
+    .examples {
+      display: grid;
+      gap: .4rem;
+      padding-bottom: .7rem;
+    }
+    .example-question {
+      padding: .45rem .55rem;
+      border: 1px solid #b8c6d8;
+      border-radius: .5rem;
+      background: #fff;
+      text-align: left;
+      color: var(--ink);
+      font-size: .88rem;
+    }
+
+    .chat-form {
+      display: flex;
+      gap: .5rem;
+      padding-top: .6rem;
+      border-top: 1px solid #d5dbe4;
+    }
+    .chat-form input {
+      min-width: 0;
+      flex: 1;
+      padding: .65rem;
+      border: 1px solid #9aa8ba;
+      border-radius: .5rem;
+    }
+    .chat-form button {
+      padding: .6rem .8rem;
+      border: 0;
+      border-radius: .5rem;
+      background: var(--ink);
+      color: #fff;
+      font-weight: 700;
+    }
+    .chat-form button:disabled { opacity: .6; cursor: wait; }
+
+    /* Abschluss-Overlay */
+    .overlay {
+      position: fixed;
+      z-index: 30;
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 1rem;
+      background: rgba(12, 23, 40, .68);
+    }
+    .overlay.visible { display: grid; }
+    .dialog {
+      width: min(560px, 100%);
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: clamp(1.2rem, 4vw, 2rem);
+      border-radius: 1rem;
+      background: #fff;
+      text-align: center;
+      box-shadow: 0 15px 50px rgba(0,0,0,.3);
+    }
+    .dialog h2 { margin: 0 0 .5rem; color: var(--ink); font-size: clamp(1.4rem, 4vw, 2rem); }
+    .stars { margin: .3rem 0 .7rem; color: #e3a700; font-size: 2.2rem; letter-spacing: .15rem; }
+    .dialog p { line-height: 1.5; }
+    .dialog button {
+      margin-top: .6rem;
+      padding: .75rem 1.1rem;
+      border: 0;
+      border-radius: .6rem;
+      background: var(--ink);
+      color: white;
+      font-weight: 750;
+    }
+    .solutions { margin-top: 1rem; text-align: left; }
+    .solutions summary { cursor: pointer; font-weight: 700; }
+    .solutions ol { line-height: 1.6; padding-left: 1.5rem; }
+
+    .confetti {
+      position: fixed;
+      z-index: 40;
+      top: -20px;
+      width: 9px;
+      height: 13px;
+      pointer-events: none;
+      animation: fall 2.8s linear forwards;
+    }
+    @keyframes fall {
+      to { transform: translateY(110vh) rotate(760deg); opacity: .2; }
+    }
+
+    @media (max-width: 580px) {
+      .topbar { grid-template-columns: 44px 1fr auto; gap: .5rem; }
+      .new-game { padding: .58rem .65rem; font-size: .9rem; }
+      .board { gap: 4px; width: calc(100% - .6rem); }
+      .tile { border-radius: 5px; border-width: 1px; }
+      .tile.selected { border-width: 3px; }
+      .instructions { margin-bottom: .65rem; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+      .confetti { animation-duration: .01ms !important; }
+    }
+  </style>
+</head>
+
+<body>
+  <header class="topbar">
+    <button class="help-button" id="openChat" type="button" aria-label="Mathe-Tutor öffnen">?</button>
+    <h1>Grafisches Ableiten</h1>
+    <button class="new-game" id="newGame" type="button">Neues Spiel</button>
+  </header>
+
+  <section class="scoreboard" aria-label="Spielstand">
+    <div class="score" id="pairScore" aria-live="polite">Gefundene Paare: 0 / 12</div>
+    <div class="score" id="mistakeScore" aria-live="polite">Fehlversuche: 0</div>
+  </section>
+
+  <p class="instructions">
+    Finde jeweils die beiden Graphen, die zu einer Funktion und ihrer Ableitung gehören.
+    Die Reihenfolge der Auswahl ist egal.
+  </p>
+
+  <main>
+    <div class="board" id="board" aria-label="Spielfeld mit 25 Graphen"></div>
+    <p class="sr-only" id="gameStatus" aria-live="polite"></p>
+  </main>
+
+  <aside class="chat-panel" id="chatPanel" aria-label="Mathe-Tutor" aria-hidden="true">
+    <div class="chat-header">
+      <h2>Mathe-Tutor</h2>
+      <button class="close-chat" id="closeChat" type="button" aria-label="Chat schließen">×</button>
+    </div>
+
+    <div class="chat-messages" id="chatMessages" aria-live="polite"></div>
+
+    <div class="examples" id="examples">
+      <button class="example-question" type="button">Woran erkenne ich am Graphen von f, wo f' eine Nullstelle hat?</button>
+      <button class="example-question" type="button">Wie erkenne ich, ob eine Funktion steigt oder fällt?</button>
+      <button class="example-question" type="button">Was verrät mir ein Wendepunkt über f'?</button>
+    </div>
+
+    <form class="chat-form" id="chatForm">
+      <input id="chatInput" type="text" autocomplete="off" placeholder="Stell deine Frage …" aria-label="Frage an den Mathe-Tutor">
+      <button id="sendChat" type="submit">Senden</button>
+    </form>
+  </aside>
+
+  <div class="overlay" id="finishOverlay" role="dialog" aria-modal="true" aria-labelledby="finishTitle">
+    <div class="dialog">
+      <h2 id="finishTitle">Spiel abgeschlossen!</h2>
+      <div class="stars" id="starDisplay" aria-label=""></div>
+      <p id="finishMessage"></p>
+      <p id="finishMistakes"></p>
+
+      <details class="solutions">
+        <summary>Lösungsübersicht anzeigen</summary>
+        <ol id="solutionList"></ol>
+      </details>
+
+      <button id="playAgain" type="button">Nochmal spielen</button>
+    </div>
+  </div>
+
+  <script>
+    "use strict";
+
+    /*
+     * Funktionsdaten: Lehrkräfte können Terme und Funktionsdefinitionen hier
+     * austauschen. pairId verbindet genau ein f mit seinem f'.
+     */
+    const FUNCTIONS = [
+      { id: "f1", term: "f(x) = 0,5x² − 2", fn: x => 0.5*x*x - 2, pairId: 1, role: "f" },
+      { id: "d1", term: "f'(x) = x", fn: x => x, pairId: 1, role: "f'" },
+      { id: "f2", term: "f(x) = −x² + 2x + 2", fn: x => -x*x + 2*x + 2, pairId: 2, role: "f" },
+      { id: "d2", term: "f'(x) = −2x + 2", fn: x => -2*x + 2, pairId: 2, role: "f'" },
+      { id: "f3", term: "f(x) = x³ − 3x", fn: x => x*x*x - 3*x, pairId: 3, role: "f" },
+      { id: "d3", term: "f'(x) = 3x² − 3", fn: x => 3*x*x - 3, pairId: 3, role: "f'" },
+      { id: "f4", term: "f(x) = −⅓x³ + x + 1", fn: x => -(x*x*x)/3 + x + 1, pairId: 4, role: "f" },
+      { id: "d4", term: "f'(x) = −x² + 1", fn: x => -x*x + 1, pairId: 4, role: "f'" },
+      { id: "f5", term: "f(x) = 0,25x⁴ − x²", fn: x => 0.25*x**4 - x*x, pairId: 5, role: "f" },
+      { id: "d5", term: "f'(x) = x³ − 2x", fn: x => x*x*x - 2*x, pairId: 5, role: "f'" },
+      { id: "f6", term: "f(x) = −0,5x + 1", fn: x => -0.5*x + 1, pairId: 6, role: "f" },
+      { id: "d6", term: "f'(x) = −0,5", fn: x => -0.5, pairId: 6, role: "f'" },
+      { id: "f7", term: "f(x) = 0,5(x − 1)³ + 1", fn: x => 0.5*(x-1)**3 + 1, pairId: 7, role: "f" },
+      { id: "d7", term: "f'(x) = 1,5(x − 1)²", fn: x => 1.5*(x-1)**2, pairId: 7, role: "f'" },
+      { id: "f8", term: "f(x) = e^(0,5x)", fn: x => Math.exp(0.5*x), pairId: 8, role: "f" },
+      { id: "d8", term: "f'(x) = 0,5·e^(0,5x)", fn: x => 0.5*Math.exp(0.5*x), pairId: 8, role: "f'" },
+      { id: "f9", term: "f(x) = 2 − e^(−x)", fn: x => 2 - Math.exp(-x), pairId: 9, role: "f" },
+      { id: "d9", term: "f'(x) = e^(−x)", fn: x => Math.exp(-x), pairId: 9, role: "f'" },
+      { id: "f10", term: "f(x) = 2·sin(x)", fn: x => 2*Math.sin(x), pairId: 10, role: "f" },
+      { id: "d10", term: "f'(x) = 2·cos(x)", fn: x => 2*Math.cos(x), pairId: 10, role: "f'" },
+      { id: "f11", term: "f(x) = cos(2x) + 1", fn: x => Math.cos(2*x) + 1, pairId: 11, role: "f" },
+      { id: "d11", term: "f'(x) = −2·sin(2x)", fn: x => -2*Math.sin(2*x), pairId: 11, role: "f'" },
+      { id: "f12", term: "f(x) = sin(x) + 0,5x", fn: x => Math.sin(x) + 0.5*x, pairId: 12, role: "f" },
+      { id: "d12", term: "f'(x) = cos(x) + 0,5", fn: x => Math.cos(x) + 0.5, pairId: 12, role: "f'" },
+      { id: "g", term: "g(x) = 0,5x² + x − 1", fn: x => 0.5*x*x + x - 1, pairId: null, role: "f" }
+    ];
+
+    const SYSTEM_PROMPT =
+      "Du bist ein geduldiger Mathematik-Tutor für Schülerinnen und Schüler des beruflichen Gymnasiums in Baden-Württemberg. " +
+      "Antworte auf Deutsch, kurz, verständlich und fachlich korrekt. Nutze Fachbegriffe des Unterrichts. " +
+      "Gib bei Fragen zum aktuellen Spiel Denkanstöße und Hinweise statt der fertigen Zuordnung. " +
+      "Bleib beim Thema Differentialrechnung; lenke andere Themen freundlich zurück.";
+
+    const board = document.getElementById("board");
+    const pairScore = document.getElementById("pairScore");
+    const mistakeScore = document.getElementById("mistakeScore");
+    const gameStatus = document.getElementById("gameStatus");
+    const overlay = document.getElementById("finishOverlay");
+
+    let tiles = [];
+    let selected = null;
+    let matchedPairs = 0;
+    let mistakes = 0;
+    let locked = false;
+    let finished = false;
+
+    // Fisher–Yates-Mischung: zufällige Reihenfolge bei jedem Spielstart.
+    function shuffle(items) {
+      const copy = [...items];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+
+    /*
+     * Kontrolliert numerisch, dass die Ableitungszuordnung innerhalb der
+     * angegebenen Toleranz ausschließlich den vorgesehenen Paaren entspricht.
+     */
+    function validateDerivativePairs() {
+      const h = 1e-5;
+      const tolerance = 1e-3;
+      const points = Array.from({ length: 50 }, (_, i) => -3.9 + i * (7.8 / 49));
+
+      for (const a of FUNCTIONS) {
+        for (const b of FUNCTIONS) {
+          if (a.id === b.id) continue;
+          let isDerivative = true;
+
+          for (const x of points) {
+            const numerical = (a.fn(x + h) - a.fn(x - h)) / (2*h);
+            const candidate = b.fn(x);
+            if (!Number.isFinite(numerical) || !Number.isFinite(candidate) ||
+                Math.abs(numerical - candidate) > tolerance) {
+              isDerivative = false;
+              break;
+            }
+          }
+
+          if (isDerivative) {
+            const definedPair = a.pairId !== null &&
+              a.pairId === b.pairId &&
+              a.role === "f" &&
+              b.role === "f'";
+            if (!definedPair) {
+              throw new Error(`Unerwartete numerische Ableitungszuordnung: ${a.id} → ${b.id}`);
+            }
+          }
+        }
+      }
+    }
+
+    function createTile(item, index) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "tile";
+      button.dataset.id = item.id;
+      button.setAttribute("aria-label", `Graph ${index + 1}`);
+      button.setAttribute("aria-pressed", "false");
+
+      const canvas = document.createElement("canvas");
+      canvas.setAttribute("aria-hidden", "true");
+      button.appendChild(canvas);
+
+      const symbol = document.createElement("span");
+      symbol.className = "tile-symbol";
+      symbol.setAttribute("aria-hidden", "true");
+      button.appendChild(symbol);
+
+      button.addEventListener("click", () => chooseTile(button));
+      return button;
+    }
+
+    function drawGraph(canvas, fn) {
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
+
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, rect.width, rect.height);
+
+      const size = Math.min(rect.width, rect.height);
+      const margin = Math.max(17, size * 0.105);
+      const left = (rect.width - size) / 2 + margin;
+      const top = (rect.height - size) / 2 + margin;
+      const plotSize = size - 2 * margin;
+      const right = left + plotSize;
+      const bottom = top + plotSize;
+
+      const sx = x => left + ((x + 4) / 8) * plotSize;
+      const sy = y => top + ((4 - y) / 8) * plotSize;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(left, top, plotSize, plotSize);
+      ctx.clip();
+
+      // Achsen und Skalenstriche bei ganzzahligen Werten.
+      ctx.strokeStyle = "#25364b";
+      ctx.fillStyle = "#25364b";
+      ctx.lineWidth = Math.max(1, size * 0.005);
+      ctx.font = `${Math.max(7, size * 0.037)}px system-ui, sans-serif`;
+
+      const xAxisY = sy(0);
+      const yAxisX = sx(0);
+
+      ctx.beginPath();
+      ctx.moveTo(left, xAxisY);
+      ctx.lineTo(right, xAxisY);
+      ctx.moveTo(yAxisX, bottom);
+      ctx.lineTo(yAxisX, top);
+      ctx.stroke();
+
+      // Pfeilspitzen innerhalb der Zeichenfläche.
+      ctx.beginPath();
+      ctx.moveTo(right - 5, xAxisY - 3);
+      ctx.lineTo(right, xAxisY);
+      ctx.lineTo(right - 5, xAxisY + 3);
+      ctx.moveTo(yAxisX - 3, top + 5);
+      ctx.lineTo(yAxisX, top);
+      ctx.lineTo(yAxisX + 3, top + 5);
+      ctx.stroke();
+
+      for (let n = -4; n <= 4; n++) {
+        const tx = sx(n);
+        const ty = sy(n);
+        ctx.beginPath();
+        ctx.moveTo(tx, xAxisY - 2.5);
+        ctx.lineTo(tx, xAxisY + 2.5);
+        ctx.moveTo(yAxisX - 2.5, ty);
+        ctx.lineTo(yAxisX + 2.5, ty);
+        ctx.stroke();
+
+        if (n !== 0) {
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          ctx.fillText(String(n), tx, xAxisY + 3);
+          ctx.textAlign = "right";
+          ctx.textBaseline = "middle";
+          ctx.fillText(String(n), yAxisX - 4, ty);
+        }
+      }
+
+      // Achsenbeschriftungen.
+      ctx.font = `bold ${Math.max(9, size * 0.045)}px system-ui, sans-serif`;
+      ctx.textAlign = "right";
+      ctx.textBaseline = "bottom";
+      ctx.fillText("x", right - 1, xAxisY - 3);
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.fillText("y", yAxisX + 4, top + 1);
+
+      // 801 Stützstellen zeichnen; der Graph wird an den Plotgrenzen geclippt.
+      ctx.beginPath();
+      let started = false;
+      for (let i = 0; i <= 800; i++) {
+        const x = -4 + (8 * i / 800);
+        const y = fn(x);
+        if (!Number.isFinite(y)) {
+          started = false;
+          continue;
+        }
+        const px = sx(x);
+        const py = sy(y);
+        if (!started) {
+          ctx.moveTo(px, py);
+          started = true;
+        } else {
+          ctx.lineTo(px, py);
+        }
+      }
+      ctx.strokeStyle = "#12345a";
+      ctx.lineWidth = Math.max(2, size * 0.01);
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function redrawAll() {
+      for (const button of board.querySelectorAll(".tile")) {
+        const item = FUNCTIONS.find(f => f.id === button.dataset.id);
+        if (item) drawGraph(button.querySelector("canvas"), item.fn);
+      }
+    }
+
+    function updateScore() {
+      pairScore.textContent = `Gefundene Paare: ${matchedPairs} / 12`;
+      mistakeScore.textContent = `Fehlversuche: ${mistakes}`;
+    }
+
+    function chooseTile(button) {
+      if (locked || finished || button.disabled) return;
+
+      if (selected === button) {
+        selected.classList.remove("selected");
+        selected.setAttribute("aria-pressed", "false");
+        selected = null;
+        gameStatus.textContent = "Auswahl aufgehoben.";
+        return;
+      }
+
+      if (!selected) {
+        selected = button;
+        button.classList.add("selected");
+        button.setAttribute("aria-pressed", "true");
+        gameStatus.textContent = `${button.getAttribute("aria-label")} ausgewählt.`;
+        return;
+      }
+
+      const first = selected;
+      const second = button;
+      first.classList.remove("selected");
+      first.setAttribute("aria-pressed", "false");
+      selected = null;
+
+      const a = FUNCTIONS.find(f => f.id === first.dataset.id);
+      const b = FUNCTIONS.find(f => f.id === second.dataset.id);
+      const correct = a.pairId !== null && a.pairId === b.pairId;
+
+      if (correct) {
+        for (const tile of [first, second]) {
+          tile.classList.add("matched");
+          tile.disabled = true;
+          tile.querySelector(".tile-symbol").textContent = "✓";
+          tile.setAttribute("aria-label", `${tile.getAttribute("aria-label")}, richtig zugeordnet`);
+        }
+        matchedPairs++;
+        updateScore();
+        gameStatus.textContent = "Richtig! Ein passendes Paar gefunden.";
+        if (matchedPairs === 12) finishGame();
+      } else {
+        mistakes++;
+        updateScore();
+        locked = true;
+        for (const tile of [first, second]) {
+          tile.classList.add("wrong");
+          tile.querySelector(".tile-symbol").textContent = "✗";
+        }
+        gameStatus.textContent = "Das war keine passende Zuordnung. Versuche es erneut.";
+        window.setTimeout(() => {
+          for (const tile of [first, second]) {
+            tile.classList.remove("wrong");
+            tile.querySelector(".tile-symbol").textContent = "";
+          }
+          locked = false;
+        }, 1000);
+      }
+    }
+
+    function makeConfetti() {
+      const colors = ["#e63946", "#2a9d8f", "#f4a261", "#457b9d", "#e9c46a", "#9b5de5"];
+      for (let i = 0; i < 90; i++) {
+        const piece = document.createElement("span");
+        piece.className = "confetti";
+        piece.style.left = `${Math.random() * 100}vw`;
+        piece.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+        piece.style.animationDelay = `${Math.random() * 1.4}s`;
+        piece.style.transform = `rotate(${Math.random() * 360}deg)`;
+        document.body.appendChild(piece);
+        window.setTimeout(() => piece.remove(), 4500);
+      }
+    }
+
+    function finishGame() {
+      finished = true;
+      const distractor = board.querySelector('[data-id="g"]');
+      distractor.classList.add("distractor");
+      distractor.disabled = true;
+      distractor.querySelector(".tile-symbol").textContent = "i";
+      const hint = document.createElement("span");
+      hint.className = "tile-hint";
+      hint.textContent = "Zu diesem Graphen gab es keine Ableitung im Spielfeld.";
+      distractor.appendChild(hint);
+      distractor.setAttribute("aria-label", "Graph ohne passende Ableitung im Spielfeld");
+
+      let message = "";
+      let stars = 0;
+      if (mistakes === 0) {
+        message = "Perfekt! Fehlerfrei – du beherrschst das grafische Ableiten souverän!";
+        stars = 3;
+      } else if (mistakes <= 3) {
+        message = "Ausgezeichnet! Nur ganz wenige Fehler – sehr stark!";
+        stars = 3;
+      } else if (mistakes <= 7) {
+        message = "Gut gemacht! Du hast alle Paare gefunden.";
+        stars = 2;
+      } else if (mistakes <= 12) {
+        message = "Geschafft! Mit etwas Übung wirst du noch sicherer.";
+        stars = 1;
+      } else {
+        message = "Du hast durchgehalten und alle Paare gefunden! Schau dir die Zusammenhänge zwischen Extrempunkten von f und Nullstellen von f' noch einmal an.";
+      }
+
+      document.getElementById("finishMessage").textContent = message;
+      document.getElementById("finishMistakes").textContent = `Fehlversuche: ${mistakes}`;
+      document.getElementById("starDisplay").textContent = "★".repeat(stars);
+      document.getElementById("starDisplay").setAttribute("aria-label", `${stars} Sterne`);
+
+      const list = document.getElementById("solutionList");
+      list.replaceChildren();
+      for (let pair = 1; pair <= 12; pair++) {
+        const f = FUNCTIONS.find(item => item.pairId === pair && item.role === "f");
+        const derivative = FUNCTIONS.find(item => item.pairId === pair && item.role === "f'");
+        const li = document.createElement("li");
+        li.textContent = `${f.term}  →  ${derivative.term}`;
+        list.appendChild(li);
+      }
+
+      overlay.classList.add("visible");
+      document.getElementById("playAgain").focus();
+      if (mistakes === 0) makeConfetti();
+    }
+
+    function startGame() {
+      matchedPairs = 0;
+      mistakes = 0;
+      selected = null;
+      locked = false;
+      finished = false;
+      overlay.classList.remove("visible");
+      board.replaceChildren();
+
+      tiles = shuffle(FUNCTIONS);
+      tiles.forEach((item, i) => board.appendChild(createTile(item, i + 1)));
+      updateScore();
+      gameStatus.textContent = "Neues Spiel gestartet.";
+      requestAnimationFrame(redrawAll);
+    }
+
+    document.getElementById("newGame").addEventListener("click", startGame);
+    document.getElementById("playAgain").addEventListener("click", startGame);
+    window.addEventListener("resize", redrawAll);
+
+    // Chatverlauf bleibt im Speicher, solange diese Seite geöffnet ist.
+    const chatPanel = document.getElementById("chatPanel");
+    const chatMessages = document.getElementById("chatMessages");
+    const chatInput = document.getElementById("chatInput");
+    const chatForm = document.getElementById("chatForm");
+    const sendButton = document.getElementById("sendChat");
+    const examples = document.getElementById("examples");
+    const chatHistory = [];
+    let greeted = false;
+
+    function openChat() {
+      chatPanel.classList.add("open");
+      chatPanel.setAttribute("aria-hidden", "false");
+      if (!greeted) {
+        greeted = true;
+        addMessage("tutor", "Hallo! Ich helfe dir bei Fragen zu Ableitungen. Frag mich z. B.: Woran erkenne ich am Graphen von f, wo f' eine Nullstelle hat?");
+      }
+      chatInput.focus();
+    }
+
+    function closeChat() {
+      chatPanel.classList.remove("open");
+      chatPanel.setAttribute("aria-hidden", "true");
+      document.getElementById("openChat").focus();
+    }
+
+    document.getElementById("openChat").addEventListener("click", openChat);
+    document.getElementById("closeChat").addEventListener("click", closeChat);
+
+    function addMessage(role, text, isLoading = false) {
+      const bubble = document.createElement("div");
+      bubble.className = `message ${role}`;
+      if (isLoading) bubble.textContent = "…";
+      else {
+        // textContent prevents model output from being interpreted as HTML.
+        bubble.textContent = text;
+        if (role === "tutor" && window.renderMathInElement) {
+          renderMathInElement(bubble, {
+            delimiters: [
+              { left: "$$", right: "$$", display: true },
+              { left: "$", right: "$", display: false }
+            ],
+            throwOnError: false
+          });
+        }
+      }
+      chatMessages.appendChild(bubble);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      return bubble;
+    }
+
+    /*
+     * Einziger Ort für KI-Aufrufe.
+     * Ein Claude-Artifact kann window.claude.complete bereitstellen.
+     * Sonst wird ein eigener, serverseitig abgesicherter Endpunkt verwendet.
+     * Niemals einen API-Schlüssel in diesen Frontend-Code eintragen.
+     */
+    async function askTutor(messages) {
+      if (window.claude && typeof window.claude.complete === "function") {
+        const result = await window.claude.complete({
+          system: SYSTEM_PROMPT,
+          messages
+        });
+        return typeof result === "string" ? result : (result.text || result.content || "");
+      }
+
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ system: SYSTEM_PROMPT, messages })
+      });
+
+      if (!response.ok) throw new Error("Der Tutor-Endpunkt ist gerade nicht erreichbar.");
+      const data = await response.json();
+      const answer = data.reply || data.content || data.message;
+      if (typeof answer !== "string" || !answer.trim()) {
+        throw new Error("Es kam keine lesbare Antwort zurück.");
+      }
+      return answer;
+    }
+
+    async function submitQuestion(question) {
+      const text = question.trim();
+      if (!text || sendButton.disabled) return;
+
+      examples.hidden = true;
+      addMessage("user", text);
+      chatHistory.push({ role: "user", content: text });
+      chatInput.value = "";
+      sendButton.disabled = true;
+      const loading = addMessage("tutor", "", true);
+
+      try {
+        const answer = await askTutor(chatHistory);
+        loading.remove();
+        addMessage("tutor", answer);
+        chatHistory.push({ role: "assistant", content: answer });
+      } catch (error) {
+        loading.remove();
+        addMessage("tutor", "Entschuldigung, ich kann gerade keine Verbindung zum KI-Tutor herstellen. Bitte versuche es später noch einmal.");
+      } finally {
+        sendButton.disabled = false;
+        chatInput.focus();
+      }
+    }
+
+    chatForm.addEventListener("submit", event => {
+      event.preventDefault();
+      submitQuestion(chatInput.value);
+    });
+
+    examples.addEventListener("click", event => {
+      const button = event.target.closest("button");
+      if (button) submitQuestion(button.textContent);
+    });
+
+    try {
+      validateDerivativePairs();
+      startGame();
+    } catch (error) {
+      board.innerHTML = "";
+      gameStatus.textContent = "Fehler beim Prüfen der Funktionsdaten.";
+      console.error(error);
+      const warning = document.createElement("p");
+      warning.textContent = "Die Funktionsdaten konnten nicht eindeutig geprüft werden. Bitte überprüfe die Definitionen.";
+      warning.style.cssText = "grid-column:1/-1;padding:1rem;background:#fff;color:#9b1c1c;border-radius:.5rem";
+      board.appendChild(warning);
+    }
+  </script>
+</body>
+</html>
